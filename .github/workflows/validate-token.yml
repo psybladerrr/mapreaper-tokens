@@ -1,1 +1,126 @@
+name: Validate Token API
+on:
+  repository_dispatch:
+    types: [validate-token]
+  workflow_dispatch:
+    inputs:
+      token:
+        description: 'Token to validate'
+        required: true
+        type: string
 
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Validate token
+        id: validate
+        run: |
+          TOKEN="${{ github.event.client_payload.token || github.event.inputs.token }}"
+          
+          if [ ! -f tokens/active.json ]; then
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "error=Token database not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Проверяем существование токена
+          TOKEN_DATA=$(cat tokens/active.json | jq -r --arg token "$TOKEN" '.tokens[$token] // empty')
+          
+          if [ -z "$TOKEN_DATA" ] || [ "$TOKEN_DATA" = "null" ]; then
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "error=Token not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Извлекаем данные токена
+          TIER=$(echo "$TOKEN_DATA" | jq -r '.tier')
+          EXPIRES=$(echo "$TOKEN_DATA" | jq -r '.expires')
+          USES=$(echo "$TOKEN_DATA" | jq -r '.uses')
+          MAX_USES=$(echo "$TOKEN_DATA" | jq -r '.maxUses')
+          
+          # Проверяем срок действия
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [[ "$EXPIRES" < "$CURRENT_TIME" ]]; then
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "error=Token expired" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Проверяем лимит использований
+          if [ "$USES" -ge "$MAX_USES" ]; then
+            echo "valid=false" >> $GITHUB_OUTPUT
+            echo "error=Usage limit exceeded" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Токен валиден
+          echo "valid=true" >> $GITHUB_OUTPUT
+          echo "tier=$TIER" >> $GITHUB_OUTPUT
+          echo "uses=$USES" >> $GITHUB_OUTPUT
+          echo "max_uses=$MAX_USES" >> $GITHUB_OUTPUT
+          echo "expires=$EXPIRES" >> $GITHUB_OUTPUT
+      
+      - name: Update usage counter
+        if: steps.validate.outputs.valid == 'true'
+        run: |
+          TOKEN="${{ github.event.client_payload.token || github.event.inputs.token }}"
+          
+          # Увеличиваем счетчик использований
+          cat tokens/active.json | jq --arg token "$TOKEN" \
+            '.tokens[$token].uses += 1 | .tokens[$token].lastUsed = now | strftime("%Y-%m-%dT%H:%M:%SZ")' \
+            > tokens/active_temp.json
+          
+          mv tokens/active_temp.json tokens/active.json
+          
+          # Обновляем lastActive пользователя
+          USER_ID=$(cat tokens/active.json | jq -r --arg token "$TOKEN" '.tokens[$token].userId')
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          
+          cat tokens/users.json | jq --arg userId "$USER_ID" --arg time "$CURRENT_TIME" \
+            '.users[$userId].lastActive = $time' > tokens/users_temp.json
+          
+          mv tokens/users_temp.json tokens/users.json
+      
+      - name: Commit usage update
+        if: steps.validate.outputs.valid == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add tokens/
+          git commit -m "Update token usage: ${{ github.event.client_payload.token || github.event.inputs.token }}" || exit 0
+          git push || exit 0
+      
+      - name: Create validation result
+        run: |
+          mkdir -p validation-results
+          
+          cat > validation-results/result.json << EOF
+          {
+            "valid": ${{ steps.validate.outputs.valid }},
+            "tier": "${{ steps.validate.outputs.tier }}",
+            "uses": ${{ steps.validate.outputs.uses || 0 }},
+            "maxUses": ${{ steps.validate.outputs.max_uses || 0 }},
+            "expires": "${{ steps.validate.outputs.expires }}",
+            "error": "${{ steps.validate.outputs.error }}",
+            "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          }
+          EOF
+      
+      - name: Upload validation result
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-result
+          path: validation-results/result.json
+          retention-days: 1
