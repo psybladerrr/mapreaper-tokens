@@ -7,6 +7,14 @@
       "uses": 0,
       "maxUses": 1000,
       "userId": "user_1777483787"
+    },
+    "PRO-411B-B1C8-72B7": {
+      "tier": "Pro",
+      "created": "2026-04-29T17:43:56Z",
+      "expires": "2027-04-29T17:43:56Z",
+      "uses": 0,
+      "maxUses": 5000,
+      "userId": "user_1777484636"
     }
   },
   "metadata": {
