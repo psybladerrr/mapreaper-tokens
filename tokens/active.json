@@ -23,6 +23,14 @@
       "uses": 0,
       "maxUses": 10000,
       "userId": "user_1777485409"
+    },
+    "PREM-CC7C-3647-938C": {
+      "tier": "Premium",
+      "created": "2026-04-29T18:07:29Z",
+      "expires": "2027-04-29T18:07:29Z",
+      "uses": 0,
+      "maxUses": 10000,
+      "userId": "user_1777486049"
     }
   },
   "metadata": {
