@@ -1,5 +1,14 @@
 {
-  "users": {},
+  "users": {
+    "user_1777483787": {
+      "email": "test@example.com",
+      "tokens": [
+        "FREE-D143-50E4-7B31"
+      ],
+      "created": "2026-04-29T17:29:47Z",
+      "lastActive": "2026-04-29T17:29:47Z"
+    }
+  },
   "metadata": {
     "created": "2026-04-29T10:00:00Z",
     "version": "1.0.0",

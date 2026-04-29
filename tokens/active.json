@@ -1,5 +1,14 @@
 {
-  "tokens": {},
+  "tokens": {
+    "FREE-D143-50E4-7B31": {
+      "tier": "Free",
+      "created": "2026-04-29T17:29:47Z",
+      "expires": "2027-04-29T17:29:47Z",
+      "uses": 0,
+      "maxUses": 1000,
+      "userId": "user_1777483787"
+    }
+  },
   "metadata": {
     "created": "2026-04-29T10:00:00Z",
     "version": "1.0.0",
