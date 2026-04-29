@@ -15,6 +15,14 @@
       ],
       "created": "2026-04-29T17:43:56Z",
       "lastActive": "2026-04-29T17:43:56Z"
+    },
+    "user_1777485409": {
+      "email": "unknown@example.com",
+      "tokens": [
+        "PREM-E118-7667-4284"
+      ],
+      "created": "2026-04-29T17:56:49Z",
+      "lastActive": "2026-04-29T17:56:49Z"
     }
   },
   "metadata": {

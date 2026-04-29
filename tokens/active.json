@@ -15,6 +15,14 @@
       "uses": 0,
       "maxUses": 5000,
       "userId": "user_1777484636"
+    },
+    "PREM-E118-7667-4284": {
+      "tier": "Premium",
+      "created": "2026-04-29T17:56:49Z",
+      "expires": "2027-04-29T17:56:49Z",
+      "uses": 0,
+      "maxUses": 10000,
+      "userId": "user_1777485409"
     }
   },
   "metadata": {
