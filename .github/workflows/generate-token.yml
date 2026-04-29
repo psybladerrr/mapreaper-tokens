@@ -5,7 +5,7 @@ on:
 
 jobs:
   generate-token:
-    if: contains(github.event.issue.title, '[TOKEN REQUEST]')
+    if: contains(github.event.issue.title, '[TOKEN REQUEST]') || contains(github.event.issue.title, '%5BTOKEN%20REQUEST%5D')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -25,13 +25,29 @@ jobs:
       - name: Parse issue and generate token
         id: generate
         run: |
-          # Извлекаем данные из Issue
-          ISSUE_BODY="${{ github.event.issue.body }}"
-          ISSUE_TITLE="${{ github.event.issue.title }}"
+          # Извлекаем данные из Issue (экранируем специальные символы)
+          ISSUE_BODY=$(cat << 'EOF'
+          ${{ github.event.issue.body }}
+          EOF
+          )
+          ISSUE_TITLE=$(cat << 'EOF'
+          ${{ github.event.issue.title }}
+          EOF
+          )
           
-          # Парсим email и tier
-          EMAIL=$(echo "$ISSUE_BODY" | grep -oP 'Email: \K[^\s]+' || echo "unknown@example.com")
-          TIER=$(echo "$ISSUE_TITLE" | grep -oP '\[TOKEN REQUEST\] \K\w+' || echo "Free")
+          # Декодируем URL если нужно
+          DECODED_TITLE=$(echo "$ISSUE_TITLE" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || echo "$ISSUE_TITLE")
+          DECODED_BODY=$(echo "$ISSUE_BODY" | python3 -c "import sys, urllib.parse; print(urllib.parse.unquote(sys.stdin.read().strip()))" 2>/dev/null || echo "$ISSUE_BODY")
+          
+          echo "Original title: $ISSUE_TITLE"
+          echo "Decoded title: $DECODED_TITLE"
+          
+          # Парсим email и tier из декодированных данных
+          EMAIL=$(echo "$DECODED_BODY" | grep -oP 'Email:\s*\K[^\s]+' || echo "unknown@example.com")
+          TIER=$(echo "$DECODED_TITLE" | grep -oP '\[TOKEN REQUEST\]\s*\K\w+' || echo "Free")
+          
+          echo "Parsed email: $EMAIL"
+          echo "Parsed tier: $TIER"
           
           # Генерируем токен
           case $TIER in
@@ -58,6 +74,8 @@ jobs:
           USER_ID="user_$(date +%s)"
           CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           EXPIRE_TIME=$(date -u -d "+1 year" +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "Generated token: $TOKEN"
           
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
           echo "email=$EMAIL" >> $GITHUB_OUTPUT
