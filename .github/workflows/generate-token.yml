@@ -1,1 +1,182 @@
+name: Generate Token
+on:
+  issues:
+    types: [opened]
 
+jobs:
+  generate-token:
+    if: contains(github.event.issue.title, '[TOKEN REQUEST]')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Parse issue and generate token
+        id: generate
+        run: |
+          # Извлекаем данные из Issue
+          ISSUE_BODY="${{ github.event.issue.body }}"
+          ISSUE_TITLE="${{ github.event.issue.title }}"
+          
+          # Парсим email и tier
+          EMAIL=$(echo "$ISSUE_BODY" | grep -oP 'Email: \K[^\s]+' || echo "unknown@example.com")
+          TIER=$(echo "$ISSUE_TITLE" | grep -oP '\[TOKEN REQUEST\] \K\w+' || echo "Free")
+          
+          # Генерируем токен
+          case $TIER in
+            "Pro")
+              PREFIX="PRO"
+              MAX_USES=5000
+              ;;
+            "Premium")
+              PREFIX="PREM"
+              MAX_USES=10000
+              ;;
+            *)
+              PREFIX="FREE"
+              MAX_USES=1000
+              ;;
+          esac
+          
+          # Генерируем случайные части токена
+          PART1=$(openssl rand -hex 2 | tr '[:lower:]' '[:upper:]')
+          PART2=$(openssl rand -hex 2 | tr '[:lower:]' '[:upper:]')
+          PART3=$(openssl rand -hex 2 | tr '[:lower:]' '[:upper:]')
+          
+          TOKEN="${PREFIX}-${PART1}-${PART2}-${PART3}"
+          USER_ID="user_$(date +%s)"
+          CURRENT_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EXPIRE_TIME=$(date -u -d "+1 year" +"%Y-%m-%dT%H:%M:%SZ")
+          
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+          echo "email=$EMAIL" >> $GITHUB_OUTPUT
+          echo "tier=$TIER" >> $GITHUB_OUTPUT
+          echo "user_id=$USER_ID" >> $GITHUB_OUTPUT
+          echo "current_time=$CURRENT_TIME" >> $GITHUB_OUTPUT
+          echo "expire_time=$EXPIRE_TIME" >> $GITHUB_OUTPUT
+          echo "max_uses=$MAX_USES" >> $GITHUB_OUTPUT
+      
+      - name: Update token files
+        run: |
+          # Создаем директории если их нет
+          mkdir -p tokens
+          
+          # Инициализируем файлы если их нет
+          if [ ! -f tokens/active.json ]; then
+            echo '{"tokens":{}}' > tokens/active.json
+          fi
+          
+          if [ ! -f tokens/users.json ]; then
+            echo '{"users":{}}' > tokens/users.json
+          fi
+          
+          # Обновляем active.json
+          cat tokens/active.json | jq --arg token "${{ steps.generate.outputs.token }}" \
+            --arg tier "${{ steps.generate.outputs.tier }}" \
+            --arg created "${{ steps.generate.outputs.current_time }}" \
+            --arg expires "${{ steps.generate.outputs.expire_time }}" \
+            --arg userId "${{ steps.generate.outputs.user_id }}" \
+            --argjson maxUses "${{ steps.generate.outputs.max_uses }}" \
+            '.tokens[$token] = {
+              "tier": $tier,
+              "created": $created,
+              "expires": $expires,
+              "uses": 0,
+              "maxUses": $maxUses,
+              "userId": $userId
+            }' > tokens/active_temp.json
+          
+          mv tokens/active_temp.json tokens/active.json
+          
+          # Обновляем users.json
+          cat tokens/users.json | jq --arg userId "${{ steps.generate.outputs.user_id }}" \
+            --arg email "${{ steps.generate.outputs.email }}" \
+            --arg token "${{ steps.generate.outputs.token }}" \
+            --arg created "${{ steps.generate.outputs.current_time }}" \
+            '.users[$userId] = {
+              "email": $email,
+              "tokens": [$token],
+              "created": $created,
+              "lastActive": $created
+            }' > tokens/users_temp.json
+          
+          mv tokens/users_temp.json tokens/users.json
+      
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add tokens/
+          git commit -m "Add new token: ${{ steps.generate.outputs.token }}"
+          git push
+      
+      - name: Comment on issue with token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = '${{ steps.generate.outputs.token }}';
+            const tier = '${{ steps.generate.outputs.tier }}';
+            const expires = '${{ steps.generate.outputs.expire_time }}';
+            const maxUses = '${{ steps.generate.outputs.max_uses }}';
+            
+            const comment = `## ✅ Токен сгенерирован успешно!
+            
+            **Ваш токен:** \`${token}\`
+            
+            **Детали:**
+            - 🎯 **Уровень:** ${tier}
+            - ⏰ **Действует до:** ${expires}
+            - 🔢 **Максимум использований:** ${maxUses}
+            
+            **Как использовать:**
+            1. Откройте расширение MapReaper
+            2. Введите токен в поле активации
+            3. Нажмите "Активировать"
+            
+            **⚠️ Важно:**
+            - Сохраните токен в безопасном месте
+            - Не делитесь токеном с другими
+            - Токен предназначен только для образовательных целей
+            
+            ---
+            *Этот Issue будет автоматически закрыт через 24 часа.*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+            
+            // Добавляем лейбл "completed"
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['token-generated']
+            });
+      
+      - name: Close issue after delay
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Закрываем Issue через 24 часа
+            setTimeout(() => {
+              github.rest.issues.update({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'closed'
+              });
+            }, 24 * 60 * 60 * 1000); // 24 часа
