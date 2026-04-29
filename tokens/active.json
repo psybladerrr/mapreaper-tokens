@@ -31,6 +31,14 @@
       "uses": 0,
       "maxUses": 10000,
       "userId": "user_1777486049"
+    },
+    "FREE-EEFF-6957-94B5": {
+      "tier": "Free",
+      "created": "2026-04-29T18:39:20Z",
+      "expires": "2027-04-29T18:39:20Z",
+      "uses": 0,
+      "maxUses": 1000,
+      "userId": "user_1777487960"
     }
   },
   "metadata": {
